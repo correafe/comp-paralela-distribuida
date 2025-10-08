@@ -16,6 +16,8 @@
 typedef struct {
     int altura_bloco;
     int largura_bloco;
+    int altura_buffer;
+    int largura_buffer;
 } InfoTarefa;
 
 void ignorar_comentarios_pgm(FILE *arquivo) {
@@ -70,21 +72,30 @@ void executar_mestre(int total_processos, char* nome_arquivo) {
     for (int i = 1; i <= num_escravos && tarefas_enviadas < total_tarefas; i++) {
         int idx_linha = tarefas_enviadas / COLUNAS_GRID;
         int idx_coluna = tarefas_enviadas % COLUNAS_GRID;
-        InfoTarefa info_tarefa;
-        info_tarefa.altura_bloco = (idx_linha == LINHAS_GRID - 1) ? altura - (idx_linha * altura_base_bloco) : altura_base_bloco;
-        info_tarefa.largura_bloco = (idx_coluna == COLUNAS_GRID - 1) ? largura - (idx_coluna * largura_base_bloco) : largura_base_bloco;
         int linha_inicial = idx_linha * altura_base_bloco;
         int coluna_inicial = idx_coluna * largura_base_bloco;
 
+        InfoTarefa info_tarefa;
+        info_tarefa.altura_bloco = (idx_linha == LINHAS_GRID - 1) ? altura - linha_inicial : altura_base_bloco;
+        info_tarefa.largura_bloco = (idx_coluna == COLUNAS_GRID - 1) ? largura - coluna_inicial : largura_base_bloco;
+        info_tarefa.altura_buffer = info_tarefa.altura_bloco + 2;
+        info_tarefa.largura_buffer = info_tarefa.largura_bloco + 2;
+
         MPI_Send(&info_tarefa, sizeof(InfoTarefa), MPI_BYTE, i, TAG_TAREFA_ENVIADA, MPI_COMM_WORLD);
         
-        unsigned char* buffer_bloco = (unsigned char*)malloc(info_tarefa.altura_bloco * info_tarefa.largura_bloco * sizeof(unsigned char));
-        for(int r = 0; r < info_tarefa.altura_bloco; r++) {
-            for(int c = 0; c < info_tarefa.largura_bloco; c++) {
-                buffer_bloco[r * info_tarefa.largura_bloco + c] = dados_imagem[(linha_inicial + r) * largura + (coluna_inicial + c)];
+        unsigned char* buffer_bloco = (unsigned char*)malloc(info_tarefa.altura_buffer * info_tarefa.largura_buffer * sizeof(unsigned char));
+        for (int r = 0; r < info_tarefa.altura_buffer; r++) {
+            for (int c = 0; c < info_tarefa.largura_buffer; c++) {
+                int img_r = linha_inicial + r - 1;
+                int img_c = coluna_inicial + c - 1;
+                if (img_r >= 0 && img_r < altura && img_c >= 0 && img_c < largura) {
+                    buffer_bloco[r * info_tarefa.largura_buffer + c] = dados_imagem[img_r * largura + img_c];
+                } else {
+                    buffer_bloco[r * info_tarefa.largura_buffer + c] = 0;
+                }
             }
         }
-        MPI_Send(buffer_bloco, info_tarefa.altura_bloco * info_tarefa.largura_bloco, MPI_UNSIGNED_CHAR, i, TAG_DADOS_ENVIADOS, MPI_COMM_WORLD);
+        MPI_Send(buffer_bloco, info_tarefa.altura_buffer * info_tarefa.largura_buffer, MPI_UNSIGNED_CHAR, i, TAG_DADOS_ENVIADOS, MPI_COMM_WORLD);
         free(buffer_bloco);
         tarefas_enviadas++;
     }
@@ -100,21 +111,30 @@ void executar_mestre(int total_processos, char* nome_arquivo) {
         if (tarefas_enviadas < total_tarefas) {
             int idx_linha = tarefas_enviadas / COLUNAS_GRID;
             int idx_coluna = tarefas_enviadas % COLUNAS_GRID;
-            InfoTarefa info_tarefa;
-            info_tarefa.altura_bloco = (idx_linha == LINHAS_GRID - 1) ? altura - (idx_linha * altura_base_bloco) : altura_base_bloco;
-            info_tarefa.largura_bloco = (idx_coluna == COLUNAS_GRID - 1) ? largura - (idx_coluna * largura_base_bloco) : largura_base_bloco;
             int linha_inicial = idx_linha * altura_base_bloco;
             int coluna_inicial = idx_coluna * largura_base_bloco;
+
+            InfoTarefa info_tarefa;
+            info_tarefa.altura_bloco = (idx_linha == LINHAS_GRID - 1) ? altura - linha_inicial : altura_base_bloco;
+            info_tarefa.largura_bloco = (idx_coluna == COLUNAS_GRID - 1) ? largura - coluna_inicial : largura_base_bloco;
+            info_tarefa.altura_buffer = info_tarefa.altura_bloco + 2;
+            info_tarefa.largura_buffer = info_tarefa.largura_bloco + 2;
             
             MPI_Send(&info_tarefa, sizeof(InfoTarefa), MPI_BYTE, id_escravo, TAG_TAREFA_ENVIADA, MPI_COMM_WORLD);
             
-            unsigned char* buffer_bloco = (unsigned char*)malloc(info_tarefa.altura_bloco * info_tarefa.largura_bloco * sizeof(unsigned char));
-            for(int r = 0; r < info_tarefa.altura_bloco; r++) {
-                for(int c = 0; c < info_tarefa.largura_bloco; c++) {
-                    buffer_bloco[r * info_tarefa.largura_bloco + c] = dados_imagem[(linha_inicial + r) * largura + (coluna_inicial + c)];
+            unsigned char* buffer_bloco = (unsigned char*)malloc(info_tarefa.altura_buffer * info_tarefa.largura_buffer * sizeof(unsigned char));
+            for(int r = 0; r < info_tarefa.altura_buffer; r++) {
+                for(int c = 0; c < info_tarefa.largura_buffer; c++) {
+                    int img_r = linha_inicial + r - 1;
+                    int img_c = coluna_inicial + c - 1;
+                    if (img_r >= 0 && img_r < altura && img_c >= 0 && img_c < largura) {
+                        buffer_bloco[r * info_tarefa.largura_buffer + c] = dados_imagem[img_r * largura + img_c];
+                    } else {
+                        buffer_bloco[r * info_tarefa.largura_buffer + c] = 0;
+                    }
                 }
             }
-            MPI_Send(buffer_bloco, info_tarefa.altura_bloco * info_tarefa.largura_bloco, MPI_UNSIGNED_CHAR, id_escravo, TAG_DADOS_ENVIADOS, MPI_COMM_WORLD);
+            MPI_Send(buffer_bloco, info_tarefa.altura_buffer * info_tarefa.largura_buffer, MPI_UNSIGNED_CHAR, id_escravo, TAG_DADOS_ENVIADOS, MPI_COMM_WORLD);
             free(buffer_bloco);
             tarefas_enviadas++;
         }
@@ -139,22 +159,24 @@ void executar_escravo() {
             break; 
         }
 
-        int tamanho_bloco = info_tarefa.altura_bloco * info_tarefa.largura_bloco;
-        unsigned char* dados_bloco = (unsigned char*)malloc(tamanho_bloco * sizeof(unsigned char));
-        MPI_Recv(dados_bloco, tamanho_bloco, MPI_UNSIGNED_CHAR, 0, TAG_DADOS_ENVIADOS, MPI_COMM_WORLD, &status);
+        int tamanho_buffer = info_tarefa.altura_buffer * info_tarefa.largura_buffer;
+        unsigned char* dados_bloco = (unsigned char*)malloc(tamanho_buffer * sizeof(unsigned char));
+        MPI_Recv(dados_bloco, tamanho_buffer, MPI_UNSIGNED_CHAR, 0, TAG_DADOS_ENVIADOS, MPI_COMM_WORLD, &status);
 
         int contagem_local_estrelas = 0;
-        int largura = info_tarefa.largura_bloco;
+        int largura_buffer = info_tarefa.largura_buffer;
 
-        for (int r = 1; r < info_tarefa.altura_bloco - 1; r++) {
-            for (int c = 1; c < info_tarefa.largura_bloco - 1; c++) {
-                int idx = r * largura + c;
+        for (int r = 1; r <= info_tarefa.altura_bloco; r++) {
+            for (int c = 1; c <= info_tarefa.largura_bloco; c++) {
+                int idx = r * largura_buffer + c;
                 unsigned char valor_pixel = dados_bloco[idx];
+                
                 if (valor_pixel > LIMIAR_BRILHO_ESTRELA) {
                     bool eh_maximo_local = 
-                        valor_pixel > dados_bloco[idx - largura - 1] && valor_pixel > dados_bloco[idx - largura] && valor_pixel > dados_bloco[idx - largura + 1] &&
-                        valor_pixel > dados_bloco[idx - 1]           &&                                          valor_pixel > dados_bloco[idx + 1]           &&
-                        valor_pixel > dados_bloco[idx + largura - 1] && valor_pixel > dados_bloco[idx + largura] && valor_pixel > dados_bloco[idx + largura + 1];
+                        valor_pixel > dados_bloco[idx - largura_buffer - 1] && valor_pixel > dados_bloco[idx - largura_buffer] && valor_pixel > dados_bloco[idx - largura_buffer + 1] &&
+                        valor_pixel > dados_bloco[idx - 1]                   &&                                                                 valor_pixel > dados_bloco[idx + 1]                   &&
+                        valor_pixel > dados_bloco[idx + largura_buffer - 1] && valor_pixel > dados_bloco[idx + largura_buffer] && valor_pixel > dados_bloco[idx + largura_buffer + 1];
+                    
                     if (eh_maximo_local) {
                         contagem_local_estrelas++;
                     }
